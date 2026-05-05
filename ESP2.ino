@@ -1,16 +1,9 @@
 #include <Keypad.h>
 #include <DHT.h>
-#include <Wifi.h>
-#include <HTTPClient.h>
 
 // ===== KEYPAD SETUP =====
 const byte ROWS = 4;
 const byte COLS = 4;
-// ===== WIFI Setup =====
-const char* WIFI_SSID ="x";
-const char* WIFI_PASSWORD ="y";
-
-const char* SERVER_URL = "z";
 
 char keys[ROWS][COLS] = {
   {'1','2','3','A'},
