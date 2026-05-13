@@ -1,19 +1,36 @@
 #include <Keypad.h>
 #include <DHT.h>
-#include <WiFi.h>
-#include <HTTPClient.h>
+#include <Zigbee.h>
+
+// =======================================================
+// ===== ZIGBEE SETUP ====================================
+// =======================================================
+//
+// Jeder Boolean wird als eigene Zigbee-"Steckdose" registriert:
+//
+// Endpoint 1: keypadSolved
+// Endpoint 2: temperatureAlarm
+//
+// false = Steckdose AUS
+// true  = Steckdose AN
+
+#ifndef ZIGBEE_MODE_ZCZR
+#error "Zigbee Router/Coordinator mode is not selected in Tools -> Zigbee mode"
+#endif
+
+#define ZB_ENDPOINT_KEYPAD_SOLVED      1
+#define ZB_ENDPOINT_TEMPERATURE_ALARM  2
+
+ZigbeePowerOutlet zbKeypadSolved =
+  ZigbeePowerOutlet(ZB_ENDPOINT_KEYPAD_SOLVED);
+
+ZigbeePowerOutlet zbTemperatureAlarm =
+  ZigbeePowerOutlet(ZB_ENDPOINT_TEMPERATURE_ALARM);
+
 
 // ===== KEYPAD SETUP =====
 const byte ROWS = 4;
 const byte COLS = 4;
-
-// ===== WIFI Setup =====
-const char* WIFI_SSID = "das muss geändert werden!!";
-const char* WIFI_PASSWORD = "das muss geändert werden!!";
-const char* SERVER_URL = "das muss geändert werden!!"; 
-
-unsigned long lastServerSendTime = 0;
-const unsigned long SERVER_SEND_INTERVAL_MS = 2000;
 
 char keys[ROWS][COLS] = {
   {'1','2','3','A'},
@@ -49,9 +66,15 @@ const float TEMP_LIMIT_C = 25.0;
 String inputCode = "";
 const String correctCode = "121950";
 
-// Booleans für späteren Server
+// Booleans für Zigbee
 bool keypadSolved = false;
 bool temperatureAlarm = false;
+
+// ===== ZIGBEE STATUS CACHE =====
+// Damit nicht dauerhaft derselbe Status gesendet wird
+bool lastSentKeypadSolved = false;
+bool lastSentTemperatureAlarm = false;
+bool firstZigbeeSend = true;
 
 // ===== PRÜF-ANIMATION =====
 const unsigned long CHECK_TIME_MS = 1000;
@@ -68,54 +91,81 @@ const unsigned long TEMP_READ_INTERVAL_MS = 2000;
 float lastTempC = 0.0;
 
 
-// ===== WIFI VERBINDEN =====
-void connectWifi() {
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+// =======================================================
+// ===== ZIGBEE STARTEN ==================================
+// =======================================================
 
-  Serial.print("Verbinde mit WLAN");
+void setupZigbee() {
+  Serial.println("Starte Zigbee...");
 
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
+  // Namen setzen, damit die "Steckdosen" auf dem Raspberry Pi
+  // besser erkennbar sind.
+  zbKeypadSolved.setManufacturerAndModel(
+    "EscapeGame",
+    "KeypadSolvedOutlet"
+  );
+
+  zbTemperatureAlarm.setManufacturerAndModel(
+    "EscapeGame",
+    "TemperatureAlarmOutlet"
+  );
+
+  // Jeden Boolean als eigene Zigbee-Steckdose registrieren
+  Serial.println("Registriere Zigbee-Steckdose: keypadSolved");
+  Zigbee.addEndpoint(&zbKeypadSolved);
+
+  Serial.println("Registriere Zigbee-Steckdose: temperatureAlarm");
+  Zigbee.addEndpoint(&zbTemperatureAlarm);
+
+  // Zigbee starten
+  if (!Zigbee.begin(ZIGBEE_ROUTER)) {
+    Serial.println("Zigbee konnte nicht gestartet werden!");
+    Serial.println("ESP wird neu gestartet...");
+    ESP.restart();
+  }
+
+  Serial.println("Zigbee gestartet. Warte auf Verbindung zum Netzwerk...");
+
+  while (!Zigbee.connected()) {
     Serial.print(".");
+    delay(100);
   }
 
   Serial.println();
-  Serial.print("WLAN verbunden. ESP IP: ");
-  Serial.println(WiFi.localIP());
+  Serial.println("Zigbee verbunden!");
 }
 
 
-// ===== STATUS AN FLASK SENDEN =====
-void sendStateToServer() {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("Kein WLAN. Sende nicht.");
+// =======================================================
+// ===== STATUS AN ZIGBEE SENDEN =========================
+// =======================================================
+
+void sendStateToZigbee() {
+  bool changed =
+    firstZigbeeSend ||
+    keypadSolved != lastSentKeypadSolved ||
+    temperatureAlarm != lastSentTemperatureAlarm;
+
+  if (!changed) {
     return;
   }
 
-  HTTPClient http;
-  http.begin(SERVER_URL);
-  http.addHeader("Content-Type", "application/json");
+  Serial.println("=== Sende Zigbee-Status ===");
 
-  String json = "{";
-  json += "\"keypadSolved\":";
-  json += keypadSolved ? "true" : "false";
-  json += ",";
-  json += "\"temperatureAlarm\":";
-  json += temperatureAlarm ? "true" : "false";
-  json += ",";
-  json += "\"temperatureC\":";
-  json += String(lastTempC, 2);
-  json += "}";
+  Serial.print("keypadSolved Steckdose: ");
+  Serial.println(keypadSolved ? "AN" : "AUS");
 
-  int httpCode = http.POST(json);
+  Serial.print("temperatureAlarm Steckdose: ");
+  Serial.println(temperatureAlarm ? "AN" : "AUS");
 
-  Serial.print("An Server gesendet: ");
-  Serial.println(json);
+  // Jeder Boolean wird als eigene Steckdose gesetzt.
+  // false = aus, true = an
+  zbKeypadSolved.setState(keypadSolved);
+  zbTemperatureAlarm.setState(temperatureAlarm);
 
-  Serial.print("Server Antwortcode: ");
-  Serial.println(httpCode);
-
-  http.end();
+  lastSentKeypadSolved = keypadSolved;
+  lastSentTemperatureAlarm = temperatureAlarm;
+  firstZigbeeSend = false;
 }
 
 
@@ -165,10 +215,10 @@ void checkInputCode() {
   inputCode = "";
   setStatusLeds();
 
-  Serial.print("Boolean keypadSolved fuer Flask: ");
+  Serial.print("Boolean keypadSolved fuer Zigbee: ");
   Serial.println(keypadSolved ? "true" : "false");
 
-  sendStateToServer();
+  sendStateToZigbee();
 }
 
 
@@ -218,7 +268,7 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  connectWifi();
+  setupZigbee();
 
   dht.begin();
 
@@ -240,6 +290,9 @@ void setup() {
 
   Serial.println("Keypad + DHT22 Temperatur + Buzzer bereit.");
   Serial.println("Code eingeben und mit * pruefen.");
+
+  // Anfangszustand einmal an Zigbee senden
+  sendStateToZigbee();
 }
 
 
@@ -274,10 +327,9 @@ void loop() {
     }
   }
 
-  if (millis() - lastServerSendTime >= SERVER_SEND_INTERVAL_MS) {
-    lastServerSendTime = millis();
-    sendStateToServer();
-  }
+  // Statt alle 2 Sekunden per HTTP an Flask zu senden,
+  // wird jetzt nur bei Statusänderung an Zigbee gesendet.
+  sendStateToZigbee();
 
   delay(50);
 }
