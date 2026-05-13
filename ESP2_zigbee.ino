@@ -60,7 +60,7 @@ const int BUZZER_PIN = 4;
 const int TEMP_ALARM_LED = 22;
 const int TEMP_OK_LED = 23;
 
-const float TEMP_LIMIT_C = 25.0;
+const float TEMP_LIMIT_C = 18.0;
 
 // ===== CODE =====
 String inputCode = "";
