@@ -60,21 +60,26 @@ const int BUZZER_PIN = 4;
 const int TEMP_ALARM_LED = 22;
 const int TEMP_OK_LED = 23;
 
-const float TEMP_LIMIT_C = 18.0;
+const float TEMP_LIMIT_C = 19.0;
 
 // ===== CODE =====
 String inputCode = "";
-const String correctCode = "121950";
+const String correctCode = "10";
 
 // Booleans für Zigbee
 bool keypadSolved = false;
-bool temperatureAlarm = false;
+bool temperatureAlarm = true;
 
 // ===== ZIGBEE STATUS CACHE =====
 // Damit nicht dauerhaft derselbe Status gesendet wird
 bool lastSentKeypadSolved = false;
 bool lastSentTemperatureAlarm = false;
 bool firstZigbeeSend = true;
+
+// ===== ZIGBEE REGELMÄSSIG SENDEN =====
+// Zusätzlich zur Statusänderung alle 5 Sekunden senden
+unsigned long lastZigbeeRoutineSendTime = 0;
+const unsigned long ZIGBEE_ROUTINE_SEND_INTERVAL_MS = 5000;
 
 // ===== PRÜF-ANIMATION =====
 const unsigned long CHECK_TIME_MS = 1000;
@@ -87,7 +92,7 @@ const unsigned long BUZZER_INTERVAL_MS = 500;
 
 // ===== DHT TIMING =====
 unsigned long lastTempReadTime = 0;
-const unsigned long TEMP_READ_INTERVAL_MS = 2000;
+const unsigned long TEMP_READ_INTERVAL_MS = 1000;
 float lastTempC = 0.0;
 
 
@@ -140,16 +145,7 @@ void setupZigbee() {
 // ===== STATUS AN ZIGBEE SENDEN =========================
 // =======================================================
 
-void sendStateToZigbee() {
-  bool changed =
-    firstZigbeeSend ||
-    keypadSolved != lastSentKeypadSolved ||
-    temperatureAlarm != lastSentTemperatureAlarm;
-
-  if (!changed) {
-    return;
-  }
-
+void sendStateToZigbeeForced() {
   Serial.println("=== Sende Zigbee-Status ===");
 
   Serial.print("keypadSolved Steckdose: ");
@@ -167,6 +163,19 @@ void sendStateToZigbee() {
   lastSentTemperatureAlarm = temperatureAlarm;
   firstZigbeeSend = false;
 }
+
+void sendStateToZigbee() {
+  bool changed =
+    firstZigbeeSend ||
+    keypadSolved != lastSentKeypadSolved ||
+    temperatureAlarm != lastSentTemperatureAlarm;
+
+  if (!changed) {
+    return;
+  }
+
+  sendStateToZigbeeForced();
+} 
 
 
 // ===== KEYPAD STATUS-LEDS =====
@@ -293,6 +302,7 @@ void setup() {
 
   // Anfangszustand einmal an Zigbee senden
   sendStateToZigbee();
+  lastZigbeeRoutineSendTime = millis();
 }
 
 
@@ -327,9 +337,14 @@ void loop() {
     }
   }
 
-  // Statt alle 2 Sekunden per HTTP an Flask zu senden,
-  // wird jetzt nur bei Statusänderung an Zigbee gesendet.
-  sendStateToZigbee();
+// Eventbasiert senden: nur wenn sich ein Zustand geändert hat
+sendStateToZigbee();
 
-  delay(50);
+// Zusätzlich alle 5 Sekunden den aktuellen Status senden
+if (millis() - lastZigbeeRoutineSendTime >= ZIGBEE_ROUTINE_SEND_INTERVAL_MS) {
+  lastZigbeeRoutineSendTime = millis();
+  sendStateToZigbeeForced();
+}
+
+delay(50);
 }
