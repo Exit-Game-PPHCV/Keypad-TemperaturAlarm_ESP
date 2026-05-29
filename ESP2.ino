@@ -1,7 +1,6 @@
 #include <Keypad.h>
 #include <DHT.h>
 
-// ===== KEYPAD SETUP =====
 const byte ROWS = 4;
 const byte COLS = 4;
 
@@ -12,53 +11,43 @@ char keys[ROWS][COLS] = {
   {'*','0','#','D'}
 };
 
-// Deine Keypad-Pins
 byte rowPins[ROWS] = {3, 2, 11, 10};
 byte colPins[COLS] = {8, 1, 0, 7};
 
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
-// ===== KEYPAD LED PINS =====
 const int RED_LED_PIN = 21;
 const int GREEN_LED_PIN = 20;
 
-// ===== DHT22 / AM2302 =====
 #define DHTPIN 6
 #define DHTTYPE DHT22
 
 DHT dht(DHTPIN, DHTTYPE);
 
-// ===== TEMPERATUR / ALARM =====
 const int BUZZER_PIN = 4;
 const int TEMP_ALARM_LED = 22;
 const int TEMP_OK_LED = 23;
 
 const float TEMP_LIMIT_C = 25.0;
 
-// ===== CODE =====
 String inputCode = "";
 const String correctCode = "121950";
 
-// Booleans für späteren Server
 bool keypadSolved = false;
 bool temperatureAlarm = false;
 
-// ===== PRÜF-ANIMATION =====
 const unsigned long CHECK_TIME_MS = 1000;
 const unsigned long BLINK_INTERVAL_MS = 100;
 
-// ===== BUZZER TIMING =====
 unsigned long lastBuzzerTime = 0;
 bool buzzerState = false;
 const unsigned long BUZZER_INTERVAL_MS = 500;
 
-// ===== DHT TIMING =====
 unsigned long lastTempReadTime = 0;
 const unsigned long TEMP_READ_INTERVAL_MS = 2000;
 float lastTempC = 0.0;
 
 
-// ===== KEYPAD STATUS-LEDS =====
 void setStatusLeds() {
   if (keypadSolved) {
     digitalWrite(RED_LED_PIN, LOW);
@@ -70,7 +59,6 @@ void setStatusLeds() {
 }
 
 
-// ===== PRÜFANIMATION =====
 void checkAnimation() {
   unsigned long startTime = millis();
   bool ledState = false;
@@ -86,7 +74,6 @@ void checkAnimation() {
 }
 
 
-// ===== CODE PRÜFEN =====
 void checkInputCode() {
   Serial.print("Pruefe Eingabe: ");
   Serial.println(inputCode);
@@ -109,7 +96,6 @@ void checkInputCode() {
 }
 
 
-// ===== TEMPERATUR / BUZZER UPDATE =====
 void updateTemperatureAlarm() {
   if (millis() - lastTempReadTime >= TEMP_READ_INTERVAL_MS) {
     lastTempReadTime = millis();
@@ -150,7 +136,6 @@ void updateTemperatureAlarm() {
 }
 
 
-// ===== SETUP =====
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -178,7 +163,6 @@ void setup() {
 }
 
 
-// ===== LOOP =====
 void loop() {
   updateTemperatureAlarm();
 
