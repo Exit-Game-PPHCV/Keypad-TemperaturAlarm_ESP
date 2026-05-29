@@ -1,4 +1,4 @@
-# Firmware-Dokumentation – ESP32 #1: Potentiometer- und LDR-Modul
+# Dokumentation – ESP32 #1: Potentiometer- und LDR-Modul
 
 ## 1. Übersicht
 
