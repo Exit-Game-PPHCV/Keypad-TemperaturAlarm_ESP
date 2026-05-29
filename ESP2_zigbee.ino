@@ -39,7 +39,7 @@ char keys[ROWS][COLS] = {
   {'*','0','#','D'}
 };
 
-// Deine Keypad-Pins
+// Keypad-Pins
 byte rowPins[ROWS] = {3, 2, 11, 10};
 byte colPins[COLS] = {8, 1, 0, 7};
 
